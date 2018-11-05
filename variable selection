@@ -1,0 +1,98 @@
+modsel <- function(data) {
+  cor.result <- cor(data$con, data[, -which(colnames(data) == "con")])
+  vars.model <- colnames(cor.result)[which.max(cor.result)]
+  
+  vars.remaining <- colnames(data)[!colnames(data) %in% c("con",which.max(cor.result) )]
+  
+  start.model <- lm(as.formula(paste("con", vars.model, sep = "~")), data)
+  adj.rsq <- summary(start.model)$adj.r.squared
+  vars.pool<-c("con", colnames(cor.result)[which.max(cor.result)])
+  count<-0
+  for(n in 1:10){
+        for (var in vars.remaining) {
+             # enter new test variable into the model
+            vars.test <- paste(vars.model, var, sep="+")
+            fit.old <- lm(as.formula(paste("con", vars.model, sep="~")), data)
+            fit.new <- lm(as.formula(paste("con", vars.test, sep="~")), data)
+            new.rsq <- summary(fit.new)$adj.r.squared
+    
+            #selecting the variable with the largest adjusted R2 that meeting all five conditions
+            # condition one: intercept and all variables p-value < 0.10
+            cond1<-FALSE
+            x<- summary(fit.new)$coefficients[,4]
+            for (i in 1:length(x)){
+                 if (x[i] > 0.1) {x[i]=FALSE}
+                 else {x[i]=TRUE}
+                 }
+    
+            if (all(x)) {
+            cond1<-TRUE
+            } else {next}
+    
+             #condition two: adjusted R2 has increased  
+             cond2 <- FALSE
+             if (new.rsq>adj.rsq){cond2=TRUE}
+             else {next}
+    
+             #condition three: all variance inflation factor < 3
+             cond3<-FALSE
+             y<- vif(fit.new)
+             for (i in 1:length(y)){
+             if (y[i] > 3) {y[i]=FALSE}
+             else {y[i]=TRUE}
+             }
+    
+             if (all(y)) {
+             cond3<-TRUE
+             } else {next}
+    
+             #condition four: New enter variables' effect direction of effect was as defined a priori 
+             cond4<-FALSE
+             a<-summary(fit.new)$coefficients[,1][var]
+             b<-cor(data$con, data[var])
+             k<-a*b[1]
+             
+             if (k>0) {
+               cond4<-TRUE
+             } else {next}
+    
+             #condition five: new enter variable does not change the direction of effect of previously included variables.
+             cond5<-FALSE
+             c<-summary(fit.old)$coefficients[,1]
+             d<-summary(fit.new)$coefficients[,1]
+             e<-c()
+             p<-c()
+             for (j in 1:length(c)){
+             e[j]<-c[j]*d[j]
+             if (e[j] > 0) {p[j] = TRUE}
+             else {p[j]=FALSE}
+             }
+             if (all(p)){
+             cond5<-TRUE
+             }
+             else {next}
+    
+    
+           if (cond1 & cond2 & cond3 & cond4 & cond5){  
+           adj.rsq <- new.rsq
+           newvar<-var
+           #only the variable gives the bigest improve of R2 will be kept and bring to the next round
+           } else{next}
+          print(newvar)
+          
+          }
+    
+    
+    vars.pool<-c(vars.pool, newvar) 
+    #add more variables into the model
+    vars.model<-paste(vars.model, newvar, sep="+")
+    new.model <- lm(as.formula(paste("con", vars.model, sep = "~")), data)
+    adj.rsq <- summary(new.model)$adj.r.squared
+    vars.remaining <- colnames(data)[!colnames(data) %in% vars.pool]
+    
+    
+}
+    best.fit<-lm(as.formula(paste("con", vars.model, sep="~")), data)
+    summary(best.fit)
+
+}
